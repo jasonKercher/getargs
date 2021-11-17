@@ -60,6 +60,6 @@ program -fs     # will fail because it cannot find option 'fs'
 program -n2     # will fail because it cannot find option 'n2'
 
 # just like the double-dash long options...
-program -special=hi # equivalent to program -S hi
-program -special hi # equivalent to program -S hi
+program -special=hi
+program -special hi
 ```
