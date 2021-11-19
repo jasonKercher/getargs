@@ -6,7 +6,7 @@ import "getargs"
 
 main :: proc()
 {
-	argparser := getargs.make_getargs()
+	argparser := getargs.make_getargs({getargs.Getargs_Option.No_Dash})
 	getargs.add_arg(&argparser, "d", "dynamic", getargs.Optarg_Option.None)
 	getargs.add_arg(&argparser, "f", "first", getargs.Optarg_Option.None)
 	getargs.add_arg(&argparser, "s", "second", getargs.Optarg_Option.None)

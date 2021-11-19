@@ -13,9 +13,7 @@ main :: proc()
 	getargs.add_arg(&argparser, "number", "", getargs.Optarg_Option.Required)
 	getargs.add_arg(&argparser, "special", "", getargs.Optarg_Option.Optional)
 
-	if getargs.read_args(&argparser, os.args) {
-		os.exit(1)
-	}
+	getargs.read_args(&argparser, os.args)
 
 	if (getargs.get_flag(&argparser, "d")) {
 		fmt.println("dynamic flagged")
@@ -35,5 +33,11 @@ main :: proc()
 	if (was_flagged) {
 		fmt.printf("special flagged with payload `%s'\n", payload)
 	}
+	
+	for ; argparser.arg_idx < len(os.args) ; argparser.arg_idx += 1 {
+		fmt.printf("Additional argument: `%s'\n", os.args[argparser.arg_idx])
+	}
+
+	getargs.free_getargs(&argparser)
 }
 

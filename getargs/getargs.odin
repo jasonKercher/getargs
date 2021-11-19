@@ -9,71 +9,92 @@ Optarg :: union {
 	bool,
 }
 
+Optarg_Option :: enum { None, Required, Optional }
+
 @(private)
 Argument :: struct {
 	option:  Optarg_Option,
 	payload: Optarg,
 }
 
+/* I do not expect Short_As_Long to be set by a
+ * user. But rather, it is a consequence of sending
+ * long options as the "short_name"
+ */
+Getargs_Option :: enum { No_Dash, Short_As_Long }
+
 Getargs :: struct {
-	short_map: map[string]int,
-	long_map: map[string]int,
-	arg_vec: [dynamic]Argument,
-	optind: int,
-	short_as_long: bool,
+	arg_map:  map[string]int,
+	arg_vec:  [dynamic]Argument,
+	arg_opts: bit_set[Getargs_Option],
+	arg_idx:  int,
 }
 
-Optarg_Option :: enum {
-	None,
-	Required,
-	Optional,
+make_getargs :: proc (getargs_opts: bit_set[Getargs_Option] = {}) -> Getargs {
+	return Getargs { 
+		arg_map=make(map[string]int),
+		arg_vec=make([dynamic]Argument),
+		arg_idx=1,
+		arg_opts=getargs_opts,
+	}
 }
 
+init_getargs :: proc (self: ^Getargs, getargs_opts: bit_set[Getargs_Option] = {}) {
+	self^ = {
+		arg_map=make(map[string]int),
+		arg_vec=make([dynamic]Argument),
+		arg_idx=1,
+		arg_opts=getargs_opts,
+	}
+}
+
+free_getargs :: proc(self: ^Getargs) {
+	delete(self.arg_vec)
+	delete(self.arg_map)
+}
+
+/* Main method for adding arguments
+ * By default, the short name should represent single-dash
+ * options (like -d) and the long_name should is the double-
+ * dash option (like --dynamic).
+ */
 add_arg :: proc (self: ^Getargs,
                  short_name: string = "",
 		 long_name: string = "",
 		 option: Optarg_Option = .None) {
-	idx := len(self.arg_vec)
 
+	idx := len(self.arg_vec)
 	append(&self.arg_vec, Argument{option=option, payload=false})
 
 	if (len(short_name) > 0) {
-		self.short_map[short_name] = idx
+		if short_name in self.arg_map {
+			fmt.fprintf(os.stderr, "ambiguous option `%s'\n", short_name)
+			os.exit(1)
+		}
+
+		self.arg_map[short_name] = idx
 		if len(short_name) > 1 {
-			self.short_as_long = true
+			self.arg_opts += {.Short_As_Long}
 		}
 	}
 	if (len(long_name) > 0) {
-		self.long_map[long_name] = idx
+		if long_name in self.arg_map {
+			fmt.fprintf(os.stderr, "ambiguous option `%s'\n", long_name)
+			os.exit(1)
+		}
+		self.arg_map[long_name] = idx
 	}
 }
 
-make_getargs :: proc () -> Getargs {
-	return Getargs { 
-		short_map=make(map[string]int),
-	        long_map=make(map[string]int),
-		arg_vec=make([dynamic]Argument),
-		optind = 1,
-	}
-}
-
-init_getargs :: proc (self: ^Getargs) {
-	self^ = {
-		short_map=make(map[string]int),
-	        long_map=make(map[string]int),
-		arg_vec=make([dynamic]Argument),
-		optind = 1,
-	}
-}
-
+/* Parse short (single byte) args that may be combined (e.g. program -l -s = program -ls) */
 @(private)
-_parse_short_args :: proc(self: ^Getargs, args: []string) -> bool {
-	i := 1
-	for ; i < len(args[self.optind]); i += 1 {
-		idx, ok := self.short_map[args[self.optind][i:i+1]]
+_parse_short_args :: proc(self: ^Getargs, args: []string, dash_offset: int) {
+	i := dash_offset
+	for ; i < len(args[self.arg_idx]); i += 1 {
+		idx, ok := self.arg_map[args[self.arg_idx][i:i+1]]
 		if !ok {
-			fmt.fprintf(os.stderr, "unable to find arg `%s'\n", args[self.optind][i:i+1])
-			return true
+			fmt.fprintf(os.stderr, "unable to find arg `%s'\n", args[self.arg_idx][i:i+1])
+			os.exit(1)
 		}
 		
 		arg := &self.arg_vec[idx]
@@ -83,184 +104,127 @@ _parse_short_args :: proc(self: ^Getargs, args: []string) -> bool {
 			continue
 		}
 
-		if i+1 < len(args[self.optind]) {
-			arg.payload = args[self.optind][i+1:]
+		if i+1 < len(args[self.arg_idx]) {
+			arg.payload = args[self.arg_idx][i+1:]
 			if arg.option == .Optional || len(arg.payload.(string)) > 0 {
-				return false
+				return
 			}
-			fmt.fprintf(os.stderr, "`%c' expects an argument\n", args[self.optind][i])
-			return true
+			fmt.fprintf(os.stderr, "`%c' expects an argument\n", args[self.arg_idx][i])
+			os.exit(1)
 		}
 
-		if self.optind + 1 >= len(args) || args[self.optind+1][0] == '-' {
+		if self.arg_idx + 1 >= len(args) || args[self.arg_idx+1][0] == '-' {
 			if arg.option == .Optional {
 				arg.payload = true
-				return false
+				return
 			}
 
-			fmt.fprintf(os.stderr, "`%c' expects an argument\n", args[self.optind][i])
-			return true
+			fmt.fprintf(os.stderr, "`%c' expects an argument\n", args[self.arg_idx][i])
+			os.exit(1)
 		}
 
-		self.optind += 1
-		arg.payload = args[self.optind]
+		self.arg_idx += 1
+		arg.payload = args[self.arg_idx]
 
 		break;
 	}
-	return false
 }
 
+/* Parse long args that may use = to delimit the arg from the optarg */
 @(private)
-_parse_short_as_long :: proc(self: ^Getargs, args: []string) -> bool {
+_parse_long_arg :: proc(self: ^Getargs, args: []string, dash_offset: int) {
 	arg_name : string
 	has_optarg : bool
 
-	i := 1
-	for ; i < len(args[self.optind]); i += 1 {
-		if args[self.optind][i] == '=' {
-			arg_name = args[self.optind][1:i]
+	i := dash_offset
+	for ; i < len(args[self.arg_idx]); i += 1 {
+		if args[self.arg_idx][i] == '=' {
+			arg_name = args[self.arg_idx][dash_offset:i]
 			has_optarg = true
 			break;
 		}
 	}
 
 	if !has_optarg {
-		arg_name = args[self.optind][1:]
+		arg_name = args[self.arg_idx][dash_offset:]
 	}
 
-	idx, ok := self.short_map[arg_name]
+	idx, ok := self.arg_map[arg_name]
 	if !ok {
 		fmt.fprintf(os.stderr, "unable to find arg `%s'\n", arg_name)
-		return true
-	}
-
-	//arg := self.arg_vec[idx]
-	arg := &self.arg_vec[idx]
-	if has_optarg && arg.option == .None {
-		fmt.fprintf(os.stderr, "`%s' does not expect an argument\n", arg_name)
-		return true
-	}
-
-	if arg.option == .None {
-		arg.payload = true
-		return false
-	}
-
-	if has_optarg {
-		arg.payload = args[self.optind][i+1:]
-		return false
-	}
-
-	if self.optind + 1 >= len(args) || args[self.optind+1][0] == '-' {
-		if arg.option == .Optional {
-			arg.payload = true
-			return false
-		}
-
-		fmt.fprintf(os.stderr, "`%s' expects an argument\n", arg_name)
-		return true
-	}
-
-	self.optind += 1
-	arg.payload = args[self.optind]
-
-	return false
-}
-
-@(private)
-_parse_long_arg :: proc(self: ^Getargs, args: []string) -> bool {
-	arg_name : string
-	has_optarg : bool
-
-	i := 1
-	for ; i < len(args[self.optind]); i += 1 {
-		if args[self.optind][i] == '=' {
-			arg_name = args[self.optind][2:i]
-			has_optarg = true
-			break;
-		}
-	}
-
-	if !has_optarg {
-		arg_name = args[self.optind][2:]
-	}
-
-	idx, ok := self.long_map[arg_name]
-	if !ok {
-		fmt.fprintf(os.stderr, "unable to find arg `%s'\n", arg_name)
-		return true
+		os.exit(1)
 	}
 
 	arg := &self.arg_vec[idx]
 	if has_optarg && arg.option == .None {
 		fmt.fprintf(os.stderr, "`%s' does not expect an argument\n", arg_name)
-		return true
+		os.exit(1)
 	}
 
 	if arg.option == .None {
 		arg.payload = true
-		return false
+		return
 	}
 
 	if has_optarg {
-		arg.payload = args[self.optind][i+1:]
-		return false
+		arg.payload = args[self.arg_idx][i+1:]
+		return
 	}
 
-	if self.optind + 1 >= len(args) || args[self.optind+1][0] == '-' {
+	if self.arg_idx + 1 >= len(args) || args[self.arg_idx+1][0] == '-' {
 		if arg.option == .Optional {
 			arg.payload = true
-			return false
+			return
 		}
 
 		fmt.fprintf(os.stderr, "`%s' expects an argument\n", arg_name)
-		return true
+		os.exit(1)
 	}
 
-	self.optind += 1
-	arg.payload = args[self.optind]
-
-	return false
+	self.arg_idx += 1
+	arg.payload = args[self.arg_idx]
 }
 
-read_args :: proc (self: ^Getargs, args : []string) -> bool {
-	for ; self.optind < len(args); self.optind += 1 {
+/* Read all args starting at self.arg_idx (1 if unset), and
+ * stop as soon as a non-argument is found
+ */
+read_args :: proc (self: ^Getargs, args : []string) {
+
+	dash_offset: int = 1
+	
+	if .No_Dash in self.arg_opts {
+		dash_offset = 0
+	}
+
+	for ; self.arg_idx < len(args); self.arg_idx += 1 {
 		/* Check if arg at all */
-		if args[self.optind][0] != '-' {
-			return false
+		if args[self.arg_idx][0] != '-' && .No_Dash not_in self.arg_opts {
+			return
 		}
 
 		/* Check if long arg */
-		if len(args[self.optind]) > 2 && args[self.optind][1] == '-' {
-			if _parse_long_arg(self, args) {
-				return true
-			}
+		if len(args[self.arg_idx]) > dash_offset+1 && args[self.arg_idx][dash_offset] == '-' {
+			_parse_long_arg(self, args, dash_offset+1)
 			continue
 		}
 
-		if self.short_as_long {
-			if _parse_short_as_long(self, args) {
-				return true
-			}
+		if .Short_As_Long in self.arg_opts {
+			_parse_long_arg(self, args, dash_offset)
 		} else {
-			if _parse_short_args(self, args) {
-				return true
-			}
+			_parse_short_args(self, args, dash_offset)
 		}
 	}
-	return false
 }
 
+/* Whether there is an optarg or not, this proc will return true
+ * if the specified argument was provided.
+ */
 get_flag :: proc (self: ^Getargs, arg_name: string) -> bool {
-	idx, ok := self.short_map[arg_name]
+	idx, ok := self.arg_map[arg_name]
 	if !ok {
-		idx, ok = self.long_map[arg_name]
-		if !ok {
-			fmt.fprintf(os.stderr, "No such argument `%s'\n", arg_name)
-			return false
-		}
+		fmt.fprintf(os.stderr, "No such argument `%s'\n", arg_name)
+		return false
 	}
-
 	arg := self.arg_vec[idx]
 
 	if ret, is_bool := arg.payload.(bool); !is_bool || ret {
@@ -270,16 +234,16 @@ get_flag :: proc (self: ^Getargs, arg_name: string) -> bool {
 	return false
 }
 
+/* get_payload will return the (payload, flag) where the flag
+ * represents whether the option was provided at all.  It will
+ * always return the same result as if get_flag was called.
+ */
 get_payload :: proc (self: ^Getargs, arg_name: string) -> (string, bool) {
-	idx, ok := self.short_map[arg_name]
+	idx, ok := self.arg_map[arg_name]
 	if !ok {
-		idx, ok = self.long_map[arg_name]
-		if !ok {
-			fmt.fprintf(os.stderr, "No such argument `%s'\n", arg_name)
-			return "", false
-		}
+		fmt.fprintf(os.stderr, "No such argument `%s'\n", arg_name)
+		return "", false
 	}
-
 	arg := self.arg_vec[idx]
 
 	ret, is_bool := arg.payload.(bool)
