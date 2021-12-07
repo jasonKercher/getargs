@@ -6,7 +6,7 @@ import "getargs"
 
 main :: proc()
 {
-	argparser := getargs.make_getargs()
+	argparser := getargs.construct()
 	getargs.add_arg(&argparser, "d", "", getargs.Optarg_Option.None)
 	getargs.add_arg(&argparser, "f", "", getargs.Optarg_Option.None)
 	getargs.add_arg(&argparser, "second", "", getargs.Optarg_Option.None)
@@ -38,6 +38,6 @@ main :: proc()
 		fmt.printf("Additional argument: `%s'\n", os.args[argparser.arg_idx])
 	}
 
-	getargs.free_getargs(&argparser)
+	getargs.destroy(&argparser)
 }
 

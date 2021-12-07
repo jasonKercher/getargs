@@ -3,7 +3,7 @@ package getargs
 import "core:fmt"
 import "core:os"
 
-@(private)
+@(private="file")
 Optarg :: union {
 	string,
 	bool,
@@ -11,7 +11,7 @@ Optarg :: union {
 
 Optarg_Option :: enum { None, Required, Optional }
 
-@(private)
+@(private="file")
 Argument :: struct {
 	option:  Optarg_Option,
 	payload: Optarg,
@@ -30,7 +30,7 @@ Getargs :: struct {
 	arg_idx:  int,
 }
 
-make_getargs :: proc (getargs_opts: bit_set[Getargs_Option] = {}) -> Getargs {
+construct :: proc (getargs_opts: bit_set[Getargs_Option] = {}) -> Getargs {
 	return Getargs { 
 		arg_map=make(map[string]int),
 		arg_vec=make([dynamic]Argument),
@@ -39,7 +39,7 @@ make_getargs :: proc (getargs_opts: bit_set[Getargs_Option] = {}) -> Getargs {
 	}
 }
 
-init_getargs :: proc (self: ^Getargs, getargs_opts: bit_set[Getargs_Option] = {}) {
+init :: proc (self: ^Getargs, getargs_opts: bit_set[Getargs_Option] = {}) {
 	self^ = {
 		arg_map=make(map[string]int),
 		arg_vec=make([dynamic]Argument),
@@ -48,7 +48,7 @@ init_getargs :: proc (self: ^Getargs, getargs_opts: bit_set[Getargs_Option] = {}
 	}
 }
 
-free_getargs :: proc(self: ^Getargs) {
+destroy :: proc(self: ^Getargs) {
 	delete(self.arg_vec)
 	delete(self.arg_map)
 }
@@ -87,7 +87,7 @@ add_arg :: proc (self: ^Getargs,
 }
 
 /* Parse short (single byte) args that may be combined (e.g. program -l -s = program -ls) */
-@(private)
+@(private="file")
 _parse_short_args :: proc(self: ^Getargs, args: []string, dash_offset: int) {
 	i := dash_offset
 	for ; i < len(args[self.arg_idx]); i += 1 {
@@ -131,7 +131,7 @@ _parse_short_args :: proc(self: ^Getargs, args: []string, dash_offset: int) {
 }
 
 /* Parse long args that may use = to delimit the arg from the optarg */
-@(private)
+@(private="file")
 _parse_long_arg :: proc(self: ^Getargs, args: []string, dash_offset: int) {
 	arg_name : string
 	has_optarg : bool

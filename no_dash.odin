@@ -6,7 +6,7 @@ import "getargs"
 
 main :: proc()
 {
-	argparser := getargs.make_getargs({getargs.Getargs_Option.No_Dash})
+	argparser := getargs.construct({getargs.Getargs_Option.No_Dash})
 	getargs.add_arg(&argparser, "d", "dynamic", getargs.Optarg_Option.None)
 	getargs.add_arg(&argparser, "f", "first", getargs.Optarg_Option.None)
 	getargs.add_arg(&argparser, "s", "second", getargs.Optarg_Option.None)
@@ -39,6 +39,6 @@ main :: proc()
 		fmt.printf("Additional argument: `%s'\n", os.args[argparser.arg_idx])
 	}
 
-	getargs.free_getargs(&argparser)
+	getargs.destroy(&argparser)
 }
 
