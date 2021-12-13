@@ -30,7 +30,7 @@ Getargs :: struct {
 	arg_idx:  int,
 }
 
-construct :: proc (getargs_opts: bit_set[Getargs_Option] = {}) -> Getargs {
+make_getargs :: proc (getargs_opts: bit_set[Getargs_Option] = {}) -> Getargs {
 	return Getargs { 
 		arg_map=make(map[string]int),
 		arg_vec=make([dynamic]Argument),
@@ -39,7 +39,7 @@ construct :: proc (getargs_opts: bit_set[Getargs_Option] = {}) -> Getargs {
 	}
 }
 
-init :: proc (self: ^Getargs, getargs_opts: bit_set[Getargs_Option] = {}) {
+construct :: proc (self: ^Getargs, getargs_opts: bit_set[Getargs_Option] = {}) {
 	self^ = {
 		arg_map=make(map[string]int),
 		arg_vec=make([dynamic]Argument),
