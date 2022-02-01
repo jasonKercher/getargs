@@ -7,11 +7,11 @@ import "getargs"
 main :: proc()
 {
 	argparser := getargs.make_getargs()
-	getargs.add_arg(&argparser, "d", "", getargs.Optarg_Option.None)
-	getargs.add_arg(&argparser, "f", "", getargs.Optarg_Option.None)
-	getargs.add_arg(&argparser, "second", "", getargs.Optarg_Option.None)
-	getargs.add_arg(&argparser, "number", "", getargs.Optarg_Option.Required)
-	getargs.add_arg(&argparser, "special", "", getargs.Optarg_Option.Optional)
+	getargs.add_arg(&argparser, "d", "", .None)
+	getargs.add_arg(&argparser, "f", "", .None)
+	getargs.add_arg(&argparser, "second", "", .None)
+	getargs.add_arg(&argparser, "number", "", .Required)
+	getargs.add_arg(&argparser, "special", "", .Optional)
 
 	getargs.read_args(&argparser, os.args)
 
