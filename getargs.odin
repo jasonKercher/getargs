@@ -75,7 +75,9 @@ add_arg :: proc(
 	idx := len(self.arg_vec)
 	append(&self.arg_vec, Argument{option = option, payload = false})
 
-	if (len(short_name) > 0) {
+	if (len(short_name) > 1) {
+		short_name := short_name
+		short_name = short_name[1:]
 		if short_name in self.arg_map {
 			fmt.fprintf(os.stderr, "ambiguous option `%s'\n", short_name)
 			os.exit(1)
@@ -86,7 +88,12 @@ add_arg :: proc(
 			self.arg_opts += {.Short_As_Long}
 		}
 	}
-	if (len(long_name) > 0) {
+	if (len(long_name) > 2) {
+		long_name := long_name
+		long_name  = long_name[1:]
+		if long_name[0] == '-' {
+			long_name = long_name[1:]
+		}
 		if long_name in self.arg_map {
 			fmt.fprintf(os.stderr, "ambiguous option `%s'\n", long_name)
 			os.exit(1)
@@ -228,33 +235,37 @@ read_args :: proc(self: ^Getargs, args: []string) {
 /* Whether there is an optarg or not, this proc will return true
  * if the specified argument was provided.
  */
-get_flag :: proc(self: ^Getargs, arg_name: string, loc := #caller_location) -> bool {
-	idx, ok := self.arg_map[arg_name]
-	if !ok {
-		fmt.eprintf("No such argument `%s': ", arg_name)
-		fmt.eprintln(loc)
-		return false
+get_flag :: proc(self: Getargs, arg_name: string, loc := #caller_location) -> bool {
+	arg_name := arg_name
+
+	if len(arg_name) > 1 && arg_name[0] == '-' {
+		arg_name = arg_name[1:]
+		if .Short_As_Long not_in self.arg_opts && len(arg_name) > 1 && arg_name[0] == '-' {
+			arg_name = arg_name[1:]
+		}
 	}
+
+	idx := self.arg_map[arg_name] or_return
 	arg := self.arg_vec[idx]
 
-	if ret, is_bool := arg.payload.(bool); !is_bool || ret {
-		return true
-	}
-
-	return false
+	ret, is_bool := arg.payload.(bool)
+	return !is_bool || ret
 }
 
 /* get_payload will return the (payload, flag) where the flag
  * represents whether the option was provided at all.  It will
  * always return the same result as if get_flag was called.
  */
-get_payload :: proc(self: ^Getargs, arg_name: string, loc := #caller_location) -> (string, bool) {
-	idx, ok := self.arg_map[arg_name]
-	if !ok {
-		fmt.eprintf("No such argument `%s': ", arg_name)
-		fmt.eprintln(loc)
-		return "", false
+get_payload :: proc(self: Getargs, arg_name: string, loc := #caller_location) -> (payload: string, exists: bool) {
+	arg_name := arg_name
+	if len(arg_name) > 1 && arg_name[0] == '-' {
+		arg_name = arg_name[1:]
+		if .Short_As_Long not_in self.arg_opts && len(arg_name) > 1 && arg_name[0] == '-' {
+			arg_name = arg_name[1:]
+		}
 	}
+
+	idx := self.arg_map[arg_name] or_return
 	arg := self.arg_vec[idx]
 
 	ret, is_bool := arg.payload.(bool)
